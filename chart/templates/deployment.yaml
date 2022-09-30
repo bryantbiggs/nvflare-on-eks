@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nvflare.fullname" . }}
+  labels:
+    {{- include "nvflare.labels" . | nindent 4 }}
+spec:
+  replicas: 1 # Must be 1 currently, does not support parallel replicas
+  selector:
+    matchLabels:
+      {{- include "nvflare.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "nvflare.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "nvflare.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          args:
+          - -u
+          - -m
+          - nvflare.private.fed.app.server.server_train
+          - -m
+          - /workspace/server1
+          - -s
+          - fed_server.json
+          - --set
+          - secure_train=true
+          - config_folder=config
+          command:
+          - /usr/local/bin/python3
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: flare
+              containerPort: {{ .Values.service.flare.port }}
+              protocol: TCP
+            - name: admin
+              containerPort: {{ .Values.service.admin.port }}
+              protocol: TCP
+          # livenessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: flare
+          # readinessProbe:
+          #   httpGet:
+          #     path: /
+          #     port: flare
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: persist
+            mountPath: /persist
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: {{ include "nvflare.fullname" . }}-efs
+      - name: persist
+        persistentVolumeClaim:
+          claimName: {{ include "nvflare.fullname" . }}-persist-efs
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
